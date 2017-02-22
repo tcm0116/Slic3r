@@ -57,7 +57,10 @@ FillRectilinear::_fill_single_direction(ExPolygon expolygon,
     
     grid_t grid;
     {
-        const Polygons polygons = expolygon;
+        // Offset the bpunding polygons by the endpoints_overlap to allow the infill to overlap
+        // the perimeters in both x and y.
+        const Polygons polygons = offset(expolygon, this->endpoints_overlap);
+
         for (Polygons::const_iterator polygon = polygons.begin(); polygon != polygons.end(); ++polygon) {
             const Points &points = polygon->points;
             
@@ -310,7 +313,6 @@ FillRectilinear::_fill_single_direction(ExPolygon expolygon,
         // Start our polyline.
         Polyline polyline;
         polyline.append(p);
-        polyline.points.back().y -= this->endpoints_overlap;
         
         while (true) {
             // Complete the vertical line by finding the corresponding upper or lower point.
@@ -328,7 +330,6 @@ FillRectilinear::_fill_single_direction(ExPolygon expolygon,
             IntersectionPoint b = it->second;
             assert(b.type != p.type);
             polyline.append(b);
-            polyline.points.back().y += this->endpoints_overlap * (b.type == IntersectionPoint::ipTypeUpper ? 1 : -1);
 
             // Remove the two endpoints of this vertical line from the grid.
             {
@@ -343,9 +344,6 @@ FillRectilinear::_fill_single_direction(ExPolygon expolygon,
                 break;
             
             // If we have a connection, append it to the polyline.
-            // We apply the y extension to the whole connection line. This works well when
-            // the connection is straight and horizontal, but doesn't work well when the
-            // connection is articulated and also has vertical parts.
             {
                 // TODO: here's where we should check for overextrusion. We should only add
                 // connection points while they are not generating vertical lines within the
@@ -353,10 +351,7 @@ FillRectilinear::_fill_single_direction(ExPolygon expolygon,
                 // a previous run of this method occupied this polygon portion (derived infill
                 // patterns doing multiple runs at different angles generate overlapping connections).
                 // In both cases, we should just stop the connection and break the polyline here.
-                const size_t n = polyline.points.size();
                 polyline.append(b.next);
-                for (Points::iterator pit = polyline.points.begin()+n; pit != polyline.points.end(); ++pit)
-                    pit->y += this->endpoints_overlap * (b.type == IntersectionPoint::ipTypeUpper ? 1 : -1);
             }
             
             // Is the final point still available?
